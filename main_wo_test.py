@@ -258,6 +258,8 @@ def main():
                 history["train_loss"].append(tr_loss)
                 history["train_acc"].append(tr_acc1)  
                 history['iter'].append(step)
+                history['tc'] = train_competency
+                history['vc'] = val_competency
                 torch.save(history,args.save_file)  
                 # reinitialization<=================
                 model.train()
@@ -302,12 +304,12 @@ def validate(val_loader, model, criterion,val_ordering):
         tracker.display(i)
     #print(pred)
     #print(val_ordering)
-    print(list(zip(pred,tgt)))
+    #print(list(zip(pred,tgt)))
     correct_ind = np.where(np.asarray(pred)==np.asarray(tgt))[0]
     val_competency = np.mean(val_ordering[correct_ind])
     #print(val_ordering[correct_ind].tolist())
     print('vc',val_competency)
-  return tracker.losses.avg, tracker.top1.avg
+  return tracker.losses.avg, tracker.top1.avg, val_competency
 
 def set_seed(seed=None):
     if seed is not None:
