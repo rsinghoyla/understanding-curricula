@@ -15,7 +15,7 @@
 import argparse
 import os
 import random
-import wget
+#import wget
 import time
 import warnings
 import json
@@ -65,6 +65,8 @@ parser.add_argument('--seed', default=None, type=int,
                     help='seed for initializing training. ')
 parser.add_argument('--half', default=False, action='store_true',
                     help='training with half precision')
+parser.add_argument('--competency', default=False, action='store_true',
+                    help='use competency')
 # curriculum params
 parser.add_argument("--pacing-f", default="linear", type=str, help="which pacing function to take")
 parser.add_argument('--pacing-a', default=1., type=float,
@@ -72,9 +74,12 @@ parser.add_argument('--pacing-a', default=1., type=float,
 parser.add_argument('--pacing-b', default=1., type=float,
                     help='weight decay (default: 1e-4)')
 parser.add_argument("--ordering", default="curr", type=str, help="which test case to use. supports: standard, curriculum, anti and random")
+parser.add_argument("--score", default="cscore", type=str, help="scorig method")
+parser.add_argument("--save_file", default="stat.pt", type=str, help="scorig method")
 parser.add_argument('--rand-fraction', default=0., type=float,
                     help='label curruption (default:0)')
 args = parser.parse_args()
+val_batchsize = args.batchsize*2
 def main():
     set_seed(args.seed) 
     # create training and validation datasets and intiate the dataloaders
@@ -85,21 +90,34 @@ def main():
     else:
         val_set = get_dataset(args.dataset, args.data_dir, 'val')        
     train_loader = torch.utils.data.DataLoader(tr_set, batch_size=args.batchsize,\
-                              shuffle=True, num_workers=args.workers, pin_memory=True)  
-    val_loader = torch.utils.data.DataLoader(val_set, batch_size=args.batchsize*2,
+                              shuffle=True, num_workers=args.workers, pin_memory=True)
+
+    val_loader = torch.utils.data.DataLoader(val_set, batch_size=val_batchsize,
                       shuffle=False, num_workers=args.workers, pin_memory=True)
 
     criterion_ind = nn.CrossEntropyLoss(reduction="none").cuda()
     # initiate a recorder for saving and loading stats and checkpoints
     if  'cscores-orig-order.npz' in args.order_dir:
-        temp_path = os.path.join("orders",args.dataset+'-cscores-orig-order.npz')
+        temp_path = ''
+        if args.score == 'lscore':
+            temp_path = os.path.join("orders",args.dataset+'-lscores_train.npz')
+        if args.score == 'kmeans':
+            temp_path = os.path.join("orders",args.dataset+'-kmscores_train.npz')
+        if args.score == 'cscore' and args.dataset == 'cifar10':
+            temp_path = os.path.join("orders",args.dataset+'-cscores-orig-order.npz')
+        if args.score == 'cscore' and args.dataset == 'cifar10T':
+            temp_path = os.path.join("orders",args.dataset+'-cscores_train.npz')
+        if args.score == 'entropy':
+            temp_path = os.path.join("orders",args.dataset+'-ent_train.npz')
+        if args.score == 'vog':
+            temp_path = os.path.join("orders",args.dataset+'-vog_train.npz')
         if not os.path.isfile(temp_path):
             print ('Downloading the data cifar10-cscores-orig-order.npz and cifar100-cscores-orig-order.npz to folder orders')
             if 'cifar100' == args.dataset:
                 url = 'https://pluskid.github.io/structural-regularity/cscores/cifar100-cscores-orig-order.npz'
             if 'cifar10' == args.dataset:
                 url = 'https://pluskid.github.io/structural-regularity/cscores/cifar10-cscores-orig-order.npz'
-            wget.download(url, './orders')
+            #wget.download(url, './orders')
         temp_x = np.load(temp_path)['scores']
         ordering = collections.defaultdict(list)
         list(map(lambda a, b: ordering[a].append(b), np.arange(len(temp_x)),temp_x))
@@ -110,7 +128,36 @@ def main():
         
     order = balance_order(order, tr_set, num_classes=len(tr_set.classes)) 
     print ("check BALANCING",len(order),len(tr_set.classes))   
-        
+
+    val_ordering = []#collections.defaultdict(list)
+    temp_path = ''
+    if args.score == 'entropy':
+        if args.dataset == 'cifar10':
+            temp_path = os.path.join("orders",args.dataset+'-ent_test.npz')
+        else:
+            temp_path = os.path.join("orders",args.dataset+'-ent_val.npz')
+    elif args.score == 'lscore':
+        if args.dataset == 'cifar10':
+            temp_path = os.path.join("orders",args.dataset+'-lscores_test.npz')
+        else:
+            temp_path = os.path.join("orders",args.dataset+'-lscores_val.npz')
+    elif args.score == 'vog':
+        if args.dataset == 'cifar10':
+            temp_path = os.path.join("orders",args.dataset+'-vog_test.npz')
+        else:
+            temp_path = os.path.join("orders",args.dataset+'-vog_val.npz')
+    elif args.score == 'kmeans':
+        if args.dataset == 'cifar10':
+            temp_path = os.path.join("orders",args.dataset+'-kmscores_test.npz')
+        else:
+            temp_path = os.path.join("orders",args.dataset+'-kmscores_val.npz')
+    elif args.score == 'cscore' and args.dataset == 'cifar10T':
+        temp_path = os.path.join("orders",args.dataset+'-cscores_val.npz')    
+    temp_x = np.load(temp_path)['scores']
+    #list(map(lambda a, b: val_ordering[a].append(b), np.arange(len(temp_x)),temp_x))
+    val_ordering = temp_x
+    
+    
     #decide CL, Anti-CL, or random-CL
     if args.ordering == "random":
         np.random.shuffle(order)
@@ -140,7 +187,7 @@ def main():
         iterations = 0
         for epoch in range(args.epochs): 
             tr_loss, tr_acc1, iterations = train(train_loader, model, criterion, optimizer,scheduler, epoch,iterations)
-            val_loss, val_acc1 = validate(val_loader, model, criterion)
+            val_loss, val_acc1 = validate(val_loader, model, criterion,val_ordering)
             print ("%s epoch %s iterations w/ LEARNING RATE %s"%(epoch, iterations,optimizer.param_groups[0]["lr"]))           
             history["val_loss"].append(val_loss)
             history["val_acc"].append(val_acc1)  
@@ -157,6 +204,14 @@ def main():
         startIter_next = pacing_function(0) # <=======================================
         print ('0 iter data between %s and %s w/ Pacing %s'%(startIter,startIter_next,args.pacing_f,))
         trainsets = Subset(tr_set, list(order[startIter:max(startIter_next,256)]))
+        train_competency = 0
+
+        m = 0
+        for o in order[startIter:max(startIter_next,256)]:
+            train_competency += ordering[o][0]
+            m += 1
+        train_competency/=m
+        print('tc',train_competency)
         train_loader = torch.utils.data.DataLoader(trainsets, batch_size=args.batchsize,
                               shuffle=True, num_workers=args.workers, pin_memory=True) 
         dataiter = iter(train_loader)
@@ -181,20 +236,29 @@ def main():
             if startIter_next <= N:            
                 startIter_next = pacing_function(step)# <=======================================
                 print ("%s iter data between %s and %s w/ Pacing %s and LEARNING RATE %s "%(step,startIter,startIter_next,args.pacing_f, optimizer.param_groups[0]["lr"]))
+                
                 train_loader = torch.utils.data.DataLoader(Subset(tr_set, list(order[startIter:max(startIter_next,256)])),\
                                                            batch_size=args.batchsize,\
                                                            shuffle=True, num_workers=args.workers, pin_memory=True)
+                train_competency = 0
+        
+                m = 0
+                for o in order[startIter:max(startIter_next,256)]:
+                    train_competency += ordering[o][0]
+                    m += 1
+                train_competency/=m
+                print('tc',train_competency)
             # start your record
             if step > 50: 
                 tr_loss, tr_acc1 = tracker.losses.avg, tracker.top1.avg 
-                val_loss, val_acc1 = validate(val_loader, model, criterion)              
+                val_loss, val_acc1 = validate(val_loader, model, criterion,val_ordering)              
                 # record
                 history["val_loss"].append(val_loss)
                 history["val_acc"].append(val_acc1)                 
                 history["train_loss"].append(tr_loss)
                 history["train_acc"].append(tr_acc1)  
-                history['iter'].append(step) 
-                torch.save(history,"stat.pt")  
+                history['iter'].append(step)
+                torch.save(history,args.save_file)  
                 # reinitialization<=================
                 model.train()
                 
@@ -216,17 +280,33 @@ def train(train_loader, model, criterion, optimizer,scheduler, epoch, iterations
     scheduler.step()
   return tracker.losses.avg, tracker.top1.avg,  iterations
 
-def validate(val_loader, model, criterion):
+def validate(val_loader, model, criterion,val_ordering):
   # switch to evaluate mode
   model.eval()
+  #print(val_ordering)
   with torch.no_grad():
     tracker = LossTracker(len(val_loader), f'val', args.printfreq)
+    m = 0
+    val_competency = 0
+    pred = []
+    tgt = []
     for i, (images, target) in enumerate(val_loader):
-      images, target = cuda_transfer(images, target)
-      output = model(images)
-      loss = criterion(output, target)
-      tracker.update(loss, output, target)
-      tracker.display(i)
+        images, target = cuda_transfer(images, target)
+        output = model(images)
+        _, predicted = output.max(1)
+        correct = predicted.eq(target).cpu().numpy()
+        pred.extend(predicted.cpu().numpy())
+        tgt.extend(target.cpu().numpy())
+        loss = criterion(output, target)
+        tracker.update(loss, output, target)
+        tracker.display(i)
+    #print(pred)
+    #print(val_ordering)
+    print(list(zip(pred,tgt)))
+    correct_ind = np.where(np.asarray(pred)==np.asarray(tgt))[0]
+    val_competency = np.mean(val_ordering[correct_ind])
+    #print(val_ordering[correct_ind].tolist())
+    print('vc',val_competency)
   return tracker.losses.avg, tracker.top1.avg
 
 def set_seed(seed=None):
@@ -241,8 +321,10 @@ def set_seed(seed=None):
                     'from checkpoints.')
 
 def cuda_transfer(images, target):
-    images = images.cuda(non_blocking=True)
-    target = target.cuda(non_blocking=True)
+    #images = images.cuda(non_blocking=True)
+    #target = target.cuda(non_blocking=True)
+    images = images.to("mps")
+    target = target.to("mps")
     if args.half: images = images.half()
     return images, target
 

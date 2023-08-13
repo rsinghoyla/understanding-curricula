@@ -14,10 +14,12 @@
 
 import os
 import torchvision.transforms as transforms
-import torchvision.datasets as datasets
+import torchvision.datasets 
+from .datasets import *
+
 from .cifar_label import *
 def get_dataset(dataset_name, data_dir, split, rand_fraction=None,clean=False, transform=None, imsize=None, bucket='pytorch-data', **kwargs):
-  if dataset_name in [ 'cifar10', 'cifar100']:
+  if dataset_name in [ 'cifar10', 'cifar100','cifar10T']:
     dataset = globals()[f'get_{dataset_name}'](dataset_name, data_dir, split, transform=imsize, imsize=imsize, bucket=bucket, **kwargs)    
   elif dataset_name in ['cifar100N']:
     dataset = globals()[f'get_{dataset_name}'](dataset_name, data_dir, split,rand_fraction= rand_fraction,transform=imsize, imsize=imsize, bucket=bucket,**kwargs)
@@ -62,17 +64,20 @@ def get_transform(split, normalize=None, transform=None, imsize=None, aug='large
 
 def get_cifar10(dataset_name, data_dir, split, transform=None, imsize=None, bucket='pytorch-data', **kwargs):
   transform = get_transform(split, transform=transform, imsize=imsize, aug='small')
-  return datasets.CIFAR10(data_dir, train=(split=='train'), transform=transform, download=True, **kwargs)
+  return torchvision.datasets.CIFAR10(data_dir, train=(split=='train'), transform=transform, download=True, **kwargs)
 
+def get_cifar10T(dataset_name, data_dir, split, transform=None, imsize=None, bucket='pytorch-data', **kwargs):
+  transform = get_transform(split, transform=transform, imsize=imsize, aug='small')
+  return CIFAR10T(data_dir, train=(split=='train'), transform=transform, download=True, **kwargs)
 
 def get_cifar100(dataset_name, data_dir, split, transform=None, imsize=None, bucket='pytorch-data', **kwargs):
   transform = get_transform(split, transform=transform, imsize=imsize, aug='small')
-  return datasets.CIFAR100(data_dir, train=(split=='train'), transform=transform, download=True, **kwargs)
+  return torchvision.datasets.CIFAR100(data_dir, train=(split=='train'), transform=transform, download=True, **kwargs)
 
 def get_cifar100N(dataset_name, data_dir, split, rand_fraction=None,transform=None, imsize=None, bucket='pytorch-data', **kwargs):
   transform = get_transform(split, transform=transform, imsize=imsize, aug='small')
   if split=='train':
     return CIFAR100N(root=data_dir, train=(split=='train'), transform=transform, download=True, rand_fraction=rand_fraction)
   else:
-    datasets.CIFAR100(data_dir, train=(split=='train'), transform=transform, download=True, **kwargs)        
+    torchvision.datasets.CIFAR100(data_dir, train=(split=='train'), transform=transform, download=True, **kwargs)        
 
