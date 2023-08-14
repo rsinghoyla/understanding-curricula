@@ -176,7 +176,7 @@ def main():
 
     start_epoch = 0
     total_iter = 0
-    history = {"train_loss": [], "train_acc": [], "val_loss": [], "val_acc": [], "iter": [0,] }
+    history = {"train_loss": [], "train_acc": [], "val_loss": [], "val_acc": [], "iter": [0,], 'tc':[],'vc':[]}
     start_time = time.time()
     trainsets = Subset(tr_set, order)
     train_loader = torch.utils.data.DataLoader(trainsets, batch_size=args.batchsize,
@@ -194,8 +194,8 @@ def main():
             history["train_loss"].append(tr_loss)
             history["train_acc"].append(tr_acc1)
             history["iter"].append(iterations)
-            history['tc'] = 0
-            history['vc'] = val_competency
+            history['tc'].append(0)
+            history['vc'].append(val_competency)
     else:
         all_sum = N/(myiterations*(myiterations+1)/2)
         iter_per_epoch = N//bs         
@@ -260,8 +260,8 @@ def main():
                 history["train_loss"].append(tr_loss)
                 history["train_acc"].append(tr_acc1)  
                 history['iter'].append(step)
-                history['tc'] = train_competency
-                history['vc'] = val_competency
+                history['tc'].append(train_competency)
+                history['vc'].append(val_competency)
                 torch.save(history,args.save_file)  
                 # reinitialization<=================
                 model.train()
