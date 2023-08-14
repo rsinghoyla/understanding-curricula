@@ -187,13 +187,15 @@ def main():
         iterations = 0
         for epoch in range(args.epochs): 
             tr_loss, tr_acc1, iterations = train(train_loader, model, criterion, optimizer,scheduler, epoch,iterations)
-            val_loss, val_acc1 = validate(val_loader, model, criterion,val_ordering)
+            val_loss, val_acc1,val_competency = validate(val_loader, model, criterion,val_ordering)
             print ("%s epoch %s iterations w/ LEARNING RATE %s"%(epoch, iterations,optimizer.param_groups[0]["lr"]))           
             history["val_loss"].append(val_loss)
             history["val_acc"].append(val_acc1)  
             history["train_loss"].append(tr_loss)
             history["train_acc"].append(tr_acc1)
             history["iter"].append(iterations)
+            history['tc'] = 0
+            history['vc'] = val_competency
     else:
         all_sum = N/(myiterations*(myiterations+1)/2)
         iter_per_epoch = N//bs         
@@ -251,7 +253,7 @@ def main():
             # start your record
             if step > 50: 
                 tr_loss, tr_acc1 = tracker.losses.avg, tracker.top1.avg 
-                val_loss, val_acc1 = validate(val_loader, model, criterion,val_ordering)              
+                val_loss, val_acc1,val_competency = validate(val_loader, model, criterion,val_ordering)              
                 # record
                 history["val_loss"].append(val_loss)
                 history["val_acc"].append(val_acc1)                 
